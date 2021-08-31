@@ -48,7 +48,7 @@ function appMainRoutine() {
 	// Read CSV phonebook file
 	const phonebook = [];
 	fs.createReadStream(phonebookFile)
-		.pipe(csv({ separator: '\t' }))
+		.pipe(csv())
 		.on('data', (data) => {
 			phonebook.push(data);
 		})
@@ -70,7 +70,12 @@ function appMainRoutine() {
 	});
 	// when the connection has opened successfully
 	conn.on("open", (result) => {
-		logger.info(`Connection opened. Result: ${result}`);
+		logger.info(`Connection opened.`);
+
+		// Save credentials whenever updated
+		const authInfo = conn.base64EncodedAuthInfo();
+		fs.writeFileSync(`${root}${path.sep}auth_info.json`, JSON.stringify(authInfo, null, '\t'));
+		logger.info(`Credentials updated!`);
 	});
 	// when the connection is opening
 	conn.on("connecting", () => {
@@ -113,13 +118,27 @@ function appMainRoutine() {
 		}
 	});
 
+	// Load qr code from cache file
+	const authInfoFile = `${root}${path.sep}auth_info.json`;
+	if (fs.existsSync(authInfoFile) && fs.statSync(authInfoFile).size > 0) { 
+		const rawAuthData = fs.readFileSync(authInfoFile);
+		try {
+			JSON.parse(rawAuthData);
+		} catch(e) {
+			logger.error(`Error parsing auth info file: ${e}`);
+			process.exit(1);
+		}
+
+		conn.loadAuthInfo(authInfoFile);
+	}
+
 	// Connect to WhatsApp
 	conn.connect()
 		.then(() => {
 			logger.info(`Succesfully connected to WhatsApp!`);
 		})
-		.catch(() => {
-			logger.error(`Failed to connect to WhatsApp!`);
+		.catch((err) => {
+			logger.error(`Failed to connect to WhatsApp! Error: ${err}`);
 			process.exit(1);
 		});
 }

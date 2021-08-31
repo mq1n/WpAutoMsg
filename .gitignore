@@ -77,3 +77,6 @@ typings/
 
 # Custom phonebook
 phonebook.csv
+
+# Auth cache
+auth_info.json
