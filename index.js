@@ -4,6 +4,7 @@ const csv = require("csv-parser");
 const fs = require("fs");
 const root = require('app-root-path');
 const path = require('path');
+const JSON5 = require('json5');
 const { MessageType, WAConnection } = require("@adiwajshing/baileys");
 const Logger = require("./logger");
 
@@ -25,8 +26,51 @@ process.on("unhandledRejection", (err) => {
 	process.exit(3);
 });
 
+// Read CSV database file
+function readCSVDatabase(file, onData, onEnd) {
+	return new Promise((resolve, reject) => {
+		fs.createReadStream(file)
+			.pipe(csv({
+				separator: ","
+			}))
+			.on("data", (data) => {
+				onData(data);
+			})
+			.on("end", () => {
+				onEnd();
+				resolve();
+			})
+			.on("error", (err) => {
+				reject(err);
+			});
+	});
+}
+
+// Read JSON database file
+function readJSONDatabase(file) {
+	return new Promise((resolve, reject) => {
+		fs.readFile(file, "utf8", (err, jobsRawData) => {
+			if (err) {
+				logger.error(err);
+				reject(err);
+			}
+			try {
+				resolve(jobsRawData);
+			}
+			catch (err) {
+				logger.error(err);
+				reject(err);
+			}	
+		});
+	});
+}
+
 // Application main routine
 function appMainRoutine() {
+	// Create logger
+	const log = new Logger();
+	log.initialize();
+
 	// Keep alive
 	process.stdin.resume();
 	// Set encoding
@@ -38,18 +82,32 @@ function appMainRoutine() {
 		}
 	});
 
-	// Check if phonebook file exists
+	// Declare variables
+	const phonebook = [];
+	const messages = [];
+	const jobs = [];
+
+	// Check is required files exist
 	const phonebookFile = `${root}${path.sep}phonebook.csv`;
 	if (!fs.existsSync(phonebookFile)) {
 		logger.error("Phonebook file not found.");
 		process.exit(1);
 	}
+	const messagesFile = `${root}${path.sep}messages.csv`;
+	if (!fs.existsSync(messagesFile)) {
+		logger.error("Messages file not found.");
+		process.exit(1);
+	}
+	const jobsFile = `${root}${path.sep}jobs.json`;
+	if (!fs.existsSync(jobsFile)) {
+		logger.error("Jobs file not found.");
+		process.exit(1);
+	}
 
-	// Read CSV phonebook file
-	const phonebook = [];
-	fs.createReadStream(phonebookFile)
-		.pipe(csv())
-		.on('data', (data) => {
+	// Read phonebook database
+	readCSVDatabase(
+		phonebookFile,
+		(data) => {
 			if (!data.ID) {
 				logger.error(`Invalid phonebook entry, missing ID!`);
 				process.exit(1);
@@ -63,44 +121,105 @@ function appMainRoutine() {
 				logger.error(`Invalid phonebook entry, Phone number is invalid!`);
 				process.exit(1);
 			}
-			phonebook.push({ type: "local", id: data.ID, phone: data.Phone });
-		})
-		.on("end", () => {
+			phonebook.push({ type: "local", id: data.ID, phone: data.Phone });					
+		},
+		() => {
 			logger.info(`Phonebook file read. ${phonebook.length} entries.`);
 
 			if (!phonebook.length) {
 				logger.error("Phonebook is empty.");
 				process.exit(1);
 			}
-		})
-
-	// Check if messages file exists
-	const messagesFile = `${root}${path.sep}messages.csv`;
-	if (!fs.existsSync(messagesFile)) {
-		logger.error("Messages file not found.");
+		}
+	).catch((err) => {
+		logger.error(err);
 		process.exit(1);
-	}
+	}).then(() => {
+		// Read messages database
+		readCSVDatabase(
+			messagesFile,
+			(data) => {
+				messages.push(data.Message);
+			},
+			() => {
+				logger.info(`Messages file read. ${messages.length} entries.`);
 
-	// Read CSV messages file
-	const messages = [];
-	fs.createReadStream(messagesFile)
-		.pipe(csv())
-		.on('data', (data) => {
-			messages.push(data.Message);
-		})
-		.on("end", () => {
-			logger.info(`Messages file read. ${messages.length} entries.`);
-
-			if (!messages.length) {
-				logger.error("Messages are empty.");
-				process.exit(1);
+				if (!messages.length) {
+					logger.error("Messages are empty.");
+					process.exit(1);
+				}
 			}
-		})
+		) .catch((err) => {
+			logger.error(err);
+			process.exit(1);
+		}).then(() => {
+			// Read jobs database
+			readJSONDatabase(jobsFile)
+				.then((jobsRawData) => {
+					const jobsData = JSON5.parse(jobsRawData);
+					const jobsLength = Object.keys(jobsData).length;
+					logger.info(`Jobs file read. ${jobsLength} entries.`);
+			
+					if (!jobsLength) {
+						logger.error("Jobs are empty.");
+						process.exit(1);
+					}
+					
+					const jobsContext = Object.values(jobsData);
+					for (let i = 0; i < jobsLength; i++) {
+						const jobContext = jobsContext[i];
+						if (!jobContext.message) {
+							logger.error(`Invalid job entry, missing message!`);
+							process.exit(1);
+						} else if (!jobContext.contacts) {
+							logger.error(`Invalid job entry, missing contacts!`);
+							process.exit(1);
+						} else if (!jobContext.date) {
+							logger.error(`Invalid job entry, missing date!`);
+							process.exit(1);
+						} else if (!jobContext.contacts.length) {
+							logger.error(`Invalid job entry, contacts are empty!`);
+							process.exit(1);
+						} else if (jobContext.message > Object.keys(messages).length) {
+							logger.error(`Invalid job entry, message index is out of range!`);
+							process.exit(1);
+						} else if (jobContext.date.length < 2) {
+							logger.error(`Invalid job entry, date is invalid!`);
+							process.exit(1);
+						} else if (typeof(jobContext.contacts) != "object" && typeof(jobContext.contacts) != "string") {
+							logger.error(`Invalid job entry, contacts are invalid!`);
+							process.exit(1);
+						} else if (typeof(jobContext.contacts) == "object" && jobContext.contacts.some(x => !phonebook.find(y => y.id === x))) {
+							logger.error(`Invalid job entry, contact is not in phonebook!`);
+							process.exit(1);
+						} else if (typeof(jobContext.contacts) == "string" && jobContext.contacts != "all") {
+							logger.error(`Invalid job entry, contact is not in phonebook!`);
+							process.exit(1);
+						}
+						
+						const messageContext = messages[jobContext.message];
+						const targetContext = jobContext.contacts == "all" ? phonebook : phonebook.filter(x => jobContext.contacts.includes(x.id));
+						const dateContext = jobContext.date;
+					
+						jobs.push({ message: messageContext, contacts: targetContext, date: dateContext });
+					}
+				})
+				.catch((err) => {
+					logger.error(err);
+					process.exit(1);
+				}).then(() => {
+					// ...
+				}
+			);
+		});
+	});
+						
+		
+	console.log("");
 
-	// Create logger
-	const log = new Logger();
-	log.initialize();
 
+
+/*
 	// Create connection
 	const conn = new WAConnection();
 	// conn.logger.level = 'debug';
@@ -155,6 +274,9 @@ function appMainRoutine() {
 	// when all initial messages are received from WA
 	conn.on("initial-data-received", () => {
 		logger.info(`Initial data received.`);
+
+		// Send messages
+		
 	});
 	// when all messages are received
 	conn.on("chats-received", async ({ hasNewChats }) => {
@@ -196,6 +318,7 @@ function appMainRoutine() {
 			logger.error(`Failed to connect to WhatsApp! Error: ${err}`);
 			process.exit(1);
 		});
+		*/
 }
 
 // Entry

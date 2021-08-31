@@ -1,0 +1,17 @@
+{
+	// Base: an object, named with index of jobs
+	//	message: an integer, message index from .csv DB
+	//	contacts: an array/string, target IDs from .csv DB/all for all of registered contacts in DB
+	//	date: an array, message send time as [HH, MM] 
+	
+	"[1]": {
+		"message": "0",
+		"contacts": ["Ali", "Veli", "Mehmet"],
+		"date": ["09", "00"]
+	},
+	"[2]": {
+		"message": "1",
+		"contacts": "all",
+		"date": ["00", "00"]
+	}
+}
