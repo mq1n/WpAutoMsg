@@ -16,7 +16,7 @@ process.title = "wpautomsg";
 process.on("exit", () => {
 	console.log(`App specific shutdown detected. Stack:\n${console.trace()}`);
 });
-// Catch ctrl+c event
+// Catch CTRL + C event
 process.on("SIGINT", () => {
 	console.log("Console break shutdown detected.");
 	process.exit(2);
@@ -216,17 +216,22 @@ function appMainRoutine() {
 						} else if (jobContext.date.length < 2) {
 							logger.error(`Invalid job entry, date is invalid!`);
 							process.exit(1);
+						} else if (jobContext.date[0] < 0 || jobContext.date[0] > 23) {
+							logger.error(`Invalid job entry, date[0] is invalid!`);
+							process.exit(1);
+						} else if (jobContext.date[1] < 0 || jobContext.date[1] > 59) {
+							logger.error(`Invalid job entry, date[1] is invalid!`);
+							process.exit(1);
 						} else if (typeof(jobContext.contacts) != "object" && typeof(jobContext.contacts) != "string") {
 							logger.error(`Invalid job entry, contacts are invalid!`);
 							process.exit(1);
 						} else if (typeof(jobContext.contacts) == "object" && jobContext.contacts.some(x => !phonebook.find(y => y.id === x))) {
-							logger.error(`Invalid job entry, contact is not in phonebook!`);
+							logger.error(`Invalid job entry, contact(object) is not in phonebook!`);
 							process.exit(1);
 						} else if (typeof(jobContext.contacts) == "string" && jobContext.contacts != "all") {
-							logger.error(`Invalid job entry, contact is not in phonebook!`);
+							logger.error(`Invalid job entry, contact(string) is not in phonebook!`);
 							process.exit(1);
 						}
-						// check date valus are correct 0-23 and 0-59
 						
 						const messageContext = messages[jobContext.message];
 						const targetContext = jobContext.contacts == "all" ? phonebook : phonebook.filter(x => jobContext.contacts.includes(x.id));
@@ -241,7 +246,6 @@ function appMainRoutine() {
 				}).then(() => {
 					// Create connection
 					const conn = new WAConnection();
-					// conn.logger.level = "debug";
 
 					// Setup callbacks
 
@@ -277,21 +281,6 @@ function appMainRoutine() {
 					// when contacts are sent
 					conn.on("contacts-received", (u) => {
 						logger.info(`Contacts received. ${u.updatedContacts.length}`);
-
-						/*
-						u.updatedContacts.forEach(o => {
-							const phoneNumber = o.jid.split("@")[0];
-							if (phoneNumber.toString().length !== 12) {
-								logger.error(`Invalid phone number: ${phoneNumber}`);
-								return;	
-							} else if (!o.name) {
-								logger.error(`Undefined contact name`);
-								return;
-							}
-
-							phonebook.push({ type: "remote", id: o.name, phone: phoneNumber });
-						});
-						*/
 					});
 					// when all initial messages are received from WA
 					conn.on("initial-data-received", () => {
@@ -351,24 +340,8 @@ function appMainRoutine() {
 							logger.info(`Job('${message}') scheduled for date: ${jobDateString}.`);		
 						}
 					});
-					// when all messages are received
-					conn.on("chats-received", async ({ hasNewChats }) => {
-						logger.info(`You have ${conn.chats.length} chats, new chats available: ${hasNewChats}`);
 
-						const unread = await conn.loadAllUnreadMessages();
-						logger.info(`You have ${unread.length} unread messages`);
-					});
-					// when a chat updated(new message, updated message, read message, deleted, pinned, presence updated etc)
-					conn.on("chat-update", (chatUpdate) => {
-						if (chatUpdate.messages && chatUpdate.count) {
-							const message = chatUpdate.messages.all()[0];
-							logger.info(message);
-						} else {
-							logger.info(chatUpdate);
-						}
-					});
-
-					// Load qr code from cache file
+					// Load QR code from cache file
 					const authInfoFile = `${root}${path.sep}auth_info.json`;
 					if (fs.existsSync(authInfoFile) && fs.statSync(authInfoFile).size > 0) { 
 						const rawAuthData = fs.readFileSync(authInfoFile);
@@ -380,7 +353,7 @@ function appMainRoutine() {
 						}
 
 						conn.loadAuthInfo(authInfoFile);
-					}
+					} 
 
 					// Connect to WhatsApp
 					conn.connect()
