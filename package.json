@@ -1,0 +1,15 @@
+{
+  "name": "wpautomsg",
+  "version": "1.0.0",
+  "description": "Whatsapp message automation",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "github.com/mq1n/wpautomsg"
+  },
+  "author": "mq1n",
+  "license": "MIT"
+}
