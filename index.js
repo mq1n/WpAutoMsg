@@ -4,7 +4,7 @@ const csv = require("csv-parser");
 const fs = require("fs");
 const root = require('app-root-path');
 const path = require('path');
-const { WAConnection } = require("@adiwajshing/baileys");
+const { MessageType, WAConnection } = require("@adiwajshing/baileys");
 const Logger = require("./logger");
 
 // Required for kill process
@@ -50,7 +50,20 @@ function appMainRoutine() {
 	fs.createReadStream(phonebookFile)
 		.pipe(csv())
 		.on('data', (data) => {
-			phonebook.push(data);
+			if (!data.ID) {
+				logger.error(`Invalid phonebook entry, missing ID!`);
+				process.exit(1);
+			} else if (!data.Phone) {
+				logger.error(`Invalid phonebook entry, missing Phone number!`);
+				process.exit(1);
+			} else if (phonebook.find(x => x.phone === data.Phone)) {
+				logger.error(`Duplicate phonebook entry, ID: ${data.ID}, Phone: ${data.Phone}`);
+				process.exit(1);
+			} else if (data.Phone.match(/\d/g).length !== 12) {
+				logger.error(`Invalid phonebook entry, Phone number is invalid!`);
+				process.exit(1);
+			}
+			phonebook.push({ type: "local", id: data.ID, phone: data.Phone });
 		})
 		.on("end", () => {
 			logger.info(`Phonebook file read. ${phonebook.length} entries.`);
@@ -62,6 +75,7 @@ function appMainRoutine() {
 
 	// Create connection
 	const conn = new WAConnection();
+	// conn.logger.level = 'debug';
 
 	// Setup callbacks
 	// when a new QR is generated, ready for scanning
@@ -69,7 +83,7 @@ function appMainRoutine() {
 		logger.info(`QR code generated: ${qr}`);
 	});
 	// when the connection has opened successfully
-	conn.on("open", (result) => {
+	conn.on("open", () => {
 		logger.info(`Connection opened.`);
 
 		// Save credentials whenever updated
@@ -96,10 +110,23 @@ function appMainRoutine() {
 	// when contacts are sent
 	conn.on("contacts-received", (u) => {
 		logger.info(`Contacts received. ${u.updatedContacts.length}`);
+
+		u.updatedContacts.forEach(o => {
+			const phoneNumber = o.jid.split("@")[0];
+			if (phoneNumber.toString().length !== 12) {
+				logger.error(`Invalid phone number: ${phoneNumber}`);
+				return;	
+			} else if (!o.name) {
+				logger.error(`Undefined contact name`);
+				return;
+			}
+
+			phonebook.push({ type: "remote", id: o.name, phone: phoneNumber });
+		});
 	});
 	// when all initial messages are received from WA
-	conn.on("initial-data-received", (update) => {
-		logger.info(`Initial data received. ${update.chatsWithMissingMessages.length}`);
+	conn.on("initial-data-received", () => {
+		logger.info(`Initial data received.`);
 	});
 	// when all messages are received
 	conn.on("chats-received", async ({ hasNewChats }) => {
