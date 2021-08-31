@@ -41,7 +41,7 @@ function appMainRoutine() {
 	// Check if phonebook file exists
 	const phonebookFile = `${root}${path.sep}phonebook.csv`;
 	if (!fs.existsSync(phonebookFile)) {
-		console.log("Phonebook file not found.");
+		logger.error("Phonebook file not found.");
 		process.exit(1);
 	}
 
@@ -67,6 +67,34 @@ function appMainRoutine() {
 		})
 		.on("end", () => {
 			logger.info(`Phonebook file read. ${phonebook.length} entries.`);
+
+			if (!phonebook.length) {
+				logger.error("Phonebook is empty.");
+				process.exit(1);
+			}
+		})
+
+	// Check if messages file exists
+	const messagesFile = `${root}${path.sep}messages.csv`;
+	if (!fs.existsSync(messagesFile)) {
+		logger.error("Messages file not found.");
+		process.exit(1);
+	}
+
+	// Read CSV messages file
+	const messages = [];
+	fs.createReadStream(messagesFile)
+		.pipe(csv())
+		.on('data', (data) => {
+			messages.push(data.Message);
+		})
+		.on("end", () => {
+			logger.info(`Messages file read. ${messages.length} entries.`);
+
+			if (!messages.length) {
+				logger.error("Messages are empty.");
+				process.exit(1);
+			}
 		})
 
 	// Create logger
