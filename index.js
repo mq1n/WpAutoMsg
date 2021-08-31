@@ -2,9 +2,10 @@
 
 const csv = require("csv-parser");
 const fs = require("fs");
-const root = require('app-root-path');
-const path = require('path');
-const JSON5 = require('json5');
+const root = require("app-root-path");
+const path = require("path");
+const JSON5 = require("json5");
+const moment = require("moment");
 const { MessageType, WAConnection } = require("@adiwajshing/baileys");
 const Logger = require("./logger");
 
@@ -21,12 +22,17 @@ process.on("SIGINT", () => {
 	process.exit(2);
 });
 // Catch unhandled rejection
+// @param {Object} err - Error object
 process.on("unhandledRejection", (err) => {
 	console.log(err);
 	process.exit(3);
 });
 
 // Read CSV database file
+// @param {String} file - File path
+// @param {function} onData - Callback function
+// @param {function} onEnd - Callback function
+// @return {promise} - Promise object
 function readCSVDatabase(file, onData, onEnd) {
 	return new Promise((resolve, reject) => {
 		fs.createReadStream(file)
@@ -47,6 +53,8 @@ function readCSVDatabase(file, onData, onEnd) {
 }
 
 // Read JSON database file
+// @param {String} file - File path
+// @return {promise} - Promise object
 function readJSONDatabase(file) {
 	return new Promise((resolve, reject) => {
 		fs.readFile(file, "utf8", (err, jobsRawData) => {
@@ -65,8 +73,30 @@ function readJSONDatabase(file) {
 	});
 }
 
+// Timer counter
+var __timerCount;
+
+// ETA(Epoch time) based timer
+// @param {Number} eta - ETA in milliseconds
+// @param {Object} ctx - Context object
+// @return {promise} - Promise object
+function customTimer(targetDate, ctx){
+	return new Promise((resolve, reject) => {
+		let timer = setTimeout(() => {
+			global.__timerCount--;
+			resolve(ctx);
+		}, targetDate - Date.now());
+
+		global.__timerCount++;
+		logger.info(`Timer successfully scheduled! Timer count: ${global.__timerCount}`);
+	});
+}
+
 // Application main routine
 function appMainRoutine() {
+	// Initialize global variables
+	global.__timerCount = 0;
+
 	// Create logger
 	const log = new Logger();
 	log.initialize();
@@ -196,6 +226,7 @@ function appMainRoutine() {
 							logger.error(`Invalid job entry, contact is not in phonebook!`);
 							process.exit(1);
 						}
+						// check date valus are correct 0-23 and 0-59
 						
 						const messageContext = messages[jobContext.message];
 						const targetContext = jobContext.contacts == "all" ? phonebook : phonebook.filter(x => jobContext.contacts.includes(x.id));
@@ -208,117 +239,162 @@ function appMainRoutine() {
 					logger.error(err);
 					process.exit(1);
 				}).then(() => {
-					// ...
+					// Create connection
+					const conn = new WAConnection();
+					// conn.logger.level = "debug";
+
+					// Setup callbacks
+
+					// when a new QR is generated, ready for scanning
+					conn.on("qr", (qr) => {
+						logger.info(`QR code generated: ${qr}`);
+					});
+					// when the connection has opened successfully
+					conn.on("open", () => {
+						logger.info(`Connection opened.`);
+
+						// Save credentials whenever updated
+						const authInfo = conn.base64EncodedAuthInfo();
+						fs.writeFileSync(`${root}${path.sep}auth_info.json`, JSON.stringify(authInfo, null, "\t"));
+						logger.info(`Credentials updated!`);
+					});
+					// when the connection is opening
+					conn.on("connecting", () => {
+						logger.info(`Connection opening...`);
+					});
+					// when the connection has closed
+					conn.on("close", (err) => {
+						logger.info(`Connection closed. Reason: ${err.reason}`);
+					});
+					// when the socket is closed
+					conn.on("ws-close", (err) => {
+						logger.info(`Socket closed. Reason: ${err.reason}`);
+					});
+					// when the connection to the phone changes
+					conn.on("connection-phone-change", (state) => {
+						logger.info(`Connection to phone changed. ${state}`);
+					});
+					// when contacts are sent
+					conn.on("contacts-received", (u) => {
+						logger.info(`Contacts received. ${u.updatedContacts.length}`);
+
+						/*
+						u.updatedContacts.forEach(o => {
+							const phoneNumber = o.jid.split("@")[0];
+							if (phoneNumber.toString().length !== 12) {
+								logger.error(`Invalid phone number: ${phoneNumber}`);
+								return;	
+							} else if (!o.name) {
+								logger.error(`Undefined contact name`);
+								return;
+							}
+
+							phonebook.push({ type: "remote", id: o.name, phone: phoneNumber });
+						});
+						*/
+					});
+					// when all initial messages are received from WA
+					conn.on("initial-data-received", () => {
+						logger.info(`Initial data received. Jobs will schedule...`);
+
+						// Schedule jobs
+						const jobsLength = Object.keys(jobs).length;
+						logger.info(`${jobsLength} jobs was found!`);
+
+						for (let i = 0; i < jobsLength; i++) {
+							const job = jobs[i];
+							const message = job.message;
+							let jobHours = Number(job.date[0]);
+							jobHours = jobHours < 10 ? "0" + jobHours : jobHours;
+							let jobMinutes = Number(job.date[1]);
+							jobMinutes = jobMinutes < 10 ? "0" + jobMinutes : jobMinutes;
+	
+							const now = moment();
+							const jobDate = moment(`${now.format("YYYY-MM-DD")} ${jobHours}:${jobMinutes}:00`);
+	
+							if (jobDate.isBefore(now)) {
+								jobDate.add(1, 'day');
+							}
+
+							const jobDateString = jobDate.format("DD-MM-YYYY HH:mm:ss SSSZ");
+							
+							customTimer(jobDate.valueOf(), { contacts: job.contacts, message: message })
+								.then((ctx) => {
+									const contacts = ctx.contacts;
+									const message = ctx.message;
+									logger.info(`Sending message "${message}" to ${contacts.length} contacts.`);
+							
+									for (let i = 0; i < contacts.length; i++) {
+										const contact = contacts[i];
+										const contactPhone = contact.phone;
+										const contactName = contact.id;
+											
+										logger.info(`Sending message "${message}" to ${contactName} (${contactPhone}).`);
+											
+										conn.sendMessage(`${contactPhone}@s.whatsapp.net`, message, MessageType.text)
+											.then((sentMsg) => {
+												logger.info(`Message "${message}" sent to ${contactName} (${contactPhone}). Status: ${sentMsg.status}`);
+											})
+											.catch((err) => {
+												logger.error(`Message "${message}" not sent to ${contactName} (${contactPhone}).`);
+												logger.error(err);
+											});							
+									}
+
+									logger.info(`Remaining timer count: ${global.__timerCount}`)
+
+									if (global.__timerCount === 0) {
+										logger.info(`All jobs finished!`);
+										process.exit(0);
+									}
+								})
+							logger.info(`Job('${message}') scheduled for date: ${jobDateString}.`);		
+						}
+					});
+					// when all messages are received
+					conn.on("chats-received", async ({ hasNewChats }) => {
+						logger.info(`You have ${conn.chats.length} chats, new chats available: ${hasNewChats}`);
+
+						const unread = await conn.loadAllUnreadMessages();
+						logger.info(`You have ${unread.length} unread messages`);
+					});
+					// when a chat updated(new message, updated message, read message, deleted, pinned, presence updated etc)
+					conn.on("chat-update", (chatUpdate) => {
+						if (chatUpdate.messages && chatUpdate.count) {
+							const message = chatUpdate.messages.all()[0];
+							logger.info(message);
+						} else {
+							logger.info(chatUpdate);
+						}
+					});
+
+					// Load qr code from cache file
+					const authInfoFile = `${root}${path.sep}auth_info.json`;
+					if (fs.existsSync(authInfoFile) && fs.statSync(authInfoFile).size > 0) { 
+						const rawAuthData = fs.readFileSync(authInfoFile);
+						try {
+							JSON.parse(rawAuthData);
+						} catch(e) {
+							logger.error(`Error parsing auth info file: ${e}`);
+							process.exit(1);
+						}
+
+						conn.loadAuthInfo(authInfoFile);
+					}
+
+					// Connect to WhatsApp
+					conn.connect()
+						.then(() => {
+							logger.info(`Succesfully connected to WhatsApp!`);
+						})
+						.catch((err) => {
+							logger.error(`Failed to connect to WhatsApp! Error: ${err}`);
+							process.exit(1);
+						});
 				}
 			);
 		});
 	});
-						
-		
-	console.log("");
-
-
-
-/*
-	// Create connection
-	const conn = new WAConnection();
-	// conn.logger.level = 'debug';
-
-	// Setup callbacks
-	// when a new QR is generated, ready for scanning
-	conn.on("qr", (qr) => {
-		logger.info(`QR code generated: ${qr}`);
-	});
-	// when the connection has opened successfully
-	conn.on("open", () => {
-		logger.info(`Connection opened.`);
-
-		// Save credentials whenever updated
-		const authInfo = conn.base64EncodedAuthInfo();
-		fs.writeFileSync(`${root}${path.sep}auth_info.json`, JSON.stringify(authInfo, null, '\t'));
-		logger.info(`Credentials updated!`);
-	});
-	// when the connection is opening
-	conn.on("connecting", () => {
-		logger.info(`Connection opening...`);
-	});
-	// when the connection has closed
-	conn.on("close", (err) => {
-		logger.info(`Connection closed. Reason: ${err.reason}`);
-	});
-	// when the socket is closed
-	conn.on("ws-close", (err) => {
-		logger.info(`Socket closed. Reason: ${err.reason}`);
-	});
-	// when the connection to the phone changes
-	conn.on("connection-phone-change", (state) => {
-		logger.info(`Connection to phone changed. ${state}`);
-	});
-	// when contacts are sent
-	conn.on("contacts-received", (u) => {
-		logger.info(`Contacts received. ${u.updatedContacts.length}`);
-
-		u.updatedContacts.forEach(o => {
-			const phoneNumber = o.jid.split("@")[0];
-			if (phoneNumber.toString().length !== 12) {
-				logger.error(`Invalid phone number: ${phoneNumber}`);
-				return;	
-			} else if (!o.name) {
-				logger.error(`Undefined contact name`);
-				return;
-			}
-
-			phonebook.push({ type: "remote", id: o.name, phone: phoneNumber });
-		});
-	});
-	// when all initial messages are received from WA
-	conn.on("initial-data-received", () => {
-		logger.info(`Initial data received.`);
-
-		// Send messages
-		
-	});
-	// when all messages are received
-	conn.on("chats-received", async ({ hasNewChats }) => {
-		logger.info(`You have ${conn.chats.length} chats, new chats available: ${hasNewChats}`);
-
-		const unread = await conn.loadAllUnreadMessages();
-		logger.info(`You have ${unread.length} unread messages`);
-	});
-	// when a chat updated(new message, updated message, read message, deleted, pinned, presence updated etc)
-	conn.on("chat-update", (chatUpdate) => {
-		if (chatUpdate.messages && chatUpdate.count) {
-			const message = chatUpdate.messages.all()[0];
-			logger.info(message);
-		} else {
-			logger.info(chatUpdate);
-		}
-	});
-
-	// Load qr code from cache file
-	const authInfoFile = `${root}${path.sep}auth_info.json`;
-	if (fs.existsSync(authInfoFile) && fs.statSync(authInfoFile).size > 0) { 
-		const rawAuthData = fs.readFileSync(authInfoFile);
-		try {
-			JSON.parse(rawAuthData);
-		} catch(e) {
-			logger.error(`Error parsing auth info file: ${e}`);
-			process.exit(1);
-		}
-
-		conn.loadAuthInfo(authInfoFile);
-	}
-
-	// Connect to WhatsApp
-	conn.connect()
-		.then(() => {
-			logger.info(`Succesfully connected to WhatsApp!`);
-		})
-		.catch((err) => {
-			logger.error(`Failed to connect to WhatsApp! Error: ${err}`);
-			process.exit(1);
-		});
-		*/
 }
 
 // Entry
