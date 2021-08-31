@@ -11,5 +11,15 @@
     "url": "github.com/mq1n/wpautomsg"
   },
   "author": "mq1n",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@adiwajshing/baileys": "^3.5.2",
+    "app-root-path": "^3.0.0",
+    "csv-parser": "^3.0.0",
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7",
+    "util": "^0.12.4",
+    "winston": "^3.3.3",
+    "winston-daily-rotate-file": "^4.5.5"
+  }
 }
