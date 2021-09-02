@@ -86,16 +86,16 @@ module.exports = class Logger {
 			),
 			transports: [
 				new winston.transports.Console(),
-				new winston.transports.File({ filename: "/log/error.log", level: "error" }),
-				new winston.transports.File({ filename: "/log/fatal_error.log", level: "crit" }),
+				new winston.transports.File({ filename: `${logPath}/error.log`, level: "error" }),
+				new winston.transports.File({ filename: `${logPath}/fatal_error.log`, level: "crit" }),
 				transport
 			]/*,
 			exceptionHandlers: [
-				new winston.transports.File({ filename: "/log/exceptions.log" })
-			]*/
-			/*,
+				new winston.transports.File({ filename: `${logPath}/exceptions.log` })
+			]
+			,
 			rejectionHandlers: [
-				new winston.transports.File({ filename: "/log/rejections.log" })
+				new winston.transports.File({ filename: `${logPath}/rejections.log` })
 			]*/
 		});
 		winston.addColors(this._customLogLevels.colors);
