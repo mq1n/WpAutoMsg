@@ -1,3 +1,4 @@
+/*global logger*/
 "use strict";
 
 const csv = require("csv-parser");
@@ -118,17 +119,17 @@ function appMainRoutine() {
 	const jobs = [];
 
 	// Check is required files exist
-	const phonebookFile = `${root}${path.sep}phonebook.csv`;
+	const phonebookFile = `${root}${path.sep}config${path.sep}phonebook.csv`;
 	if (!fs.existsSync(phonebookFile)) {
 		logger.error("Phonebook file not found.");
 		process.exit(1);
 	}
-	const messagesFile = `${root}${path.sep}messages.csv`;
+	const messagesFile = `${root}${path.sep}config${path.sep}messages.csv`;
 	if (!fs.existsSync(messagesFile)) {
 		logger.error("Messages file not found.");
 		process.exit(1);
 	}
-	const jobsFile = `${root}${path.sep}jobs.json`;
+	const jobsFile = `${root}${path.sep}config${path.sep}jobs.json`;
 	if (!fs.existsSync(jobsFile)) {
 		logger.error("Jobs file not found.");
 		process.exit(1);
@@ -259,7 +260,7 @@ function appMainRoutine() {
 
 						// Save credentials whenever updated
 						const authInfo = conn.base64EncodedAuthInfo();
-						fs.writeFileSync(`${root}${path.sep}auth_info.json`, JSON.stringify(authInfo, null, "\t"));
+						fs.writeFileSync(`${root}${path.sep}config${path.sep}auth_info.json`, JSON.stringify(authInfo, null, "\t"));
 						logger.info(`Credentials updated!`);
 					});
 					// when the connection is opening
@@ -330,19 +331,19 @@ function appMainRoutine() {
 											});							
 									}
 
-									logger.info(`Remaining timer count: ${global.__timerCount}`)
+									logger.info(`Remaining timer count: ${global.__timerCount}`);
 
 									if (global.__timerCount === 0) {
 										logger.info(`All jobs finished!`);
 										process.exit(0);
 									}
-								})
+								});
 							logger.info(`Job('${message}') scheduled for date: ${jobDateString}.`);		
 						}
 					});
 
 					// Load QR code from cache file
-					const authInfoFile = `${root}${path.sep}auth_info.json`;
+					const authInfoFile = `${root}${path.sep}config${path.sep}auth_info.json`;
 					if (fs.existsSync(authInfoFile) && fs.statSync(authInfoFile).size > 0) { 
 						const rawAuthData = fs.readFileSync(authInfoFile);
 						try {

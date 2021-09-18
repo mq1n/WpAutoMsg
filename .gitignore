@@ -75,8 +75,5 @@ typings/
 # FuseBox cache
 .fusebox/
 
-# Custom phonebook
-phonebook.csv
-
 # Auth cache
-auth_info.json
+config/auth_info.json

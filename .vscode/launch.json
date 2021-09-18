@@ -13,30 +13,7 @@
 				"<node_internals>/**"
 			],
 			"outputCapture" : "std",
-			"program": "${workspaceFolder}\\index.js"
-		},
-		{
-			"type": "node",
-			"request": "launch",
-			"name": "Mocha Tests",
-			"program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
-			"args": [
-				"${workspaceRoot}/test/*.js"
-			],
-			"internalConsoleOptions": "openOnSessionStart",
-			"skipFiles": [
-				"<node_internals>/**"
-			]
-		},
-		{
-		   "type": "node",
-		   "request": "launch",
-		   "name": "Mocha Current File",
-		   "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
-		   "args": [
-			  "${file}"
-			],
-			"cwd": "${workspaceRoot}"
+			"program": "${workspaceFolder}\\src\\index.js"
 		}
 	]
 }

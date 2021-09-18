@@ -1,27 +1,28 @@
 {
-  "name": "wpautomsg",
-  "version": "1.0.0",
-  "description": "Whatsapp message automation",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "github.com/mq1n/wpautomsg"
-  },
-  "author": "mq1n",
-  "license": "MIT",
-  "dependencies": {
-    "@adiwajshing/baileys": "^3.5.2",
-    "app-root-path": "^3.0.0",
-    "csv-parser": "^3.0.0",
-    "fs": "^0.0.1-security",
-    "json5": "^2.2.0",
-    "moment": "^2.29.1",
-    "path": "^0.12.7",
-    "util": "^0.12.4",
-    "winston": "^3.3.3",
-    "winston-daily-rotate-file": "^4.5.5"
-  }
+	"name": "wpautomsg",
+	"version": "1.0.0",
+	"description": "Whatsapp message automation",
+	"main": "src/index.js",
+	"scripts": {
+		"lint": "eslint ."
+	},
+	"repository": {
+		"type": "git",
+		"url": "github.com/mq1n/wpautomsg"
+	},
+	"author": "mq1n",
+	"license": "MIT",
+	"dependencies": {
+		"@adiwajshing/baileys": "^3.5.2",
+		"app-root-path": "^3.0.0",
+		"csv-parser": "^3.0.0",
+		"eslint": "^7.32.0",
+		"json5": "^2.2.0",
+		"moment": "^2.29.1",
+		"path": "^0.12.7",
+		"util": "^0.12.4",
+		"winston": "^3.3.3",
+		"winston-daily-rotate-file": "^4.5.5"
+	},
+	"devDependencies": {}
 }
